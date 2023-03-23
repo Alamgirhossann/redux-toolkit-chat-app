@@ -1,22 +1,46 @@
 import gravatarUrl from "gravatar-url";
 import moment from "moment";
-import { useSelector } from "react-redux";
+import { useEffect, useState } from "react";
+import InfiniteScroll from "react-infinite-scroll-component";
+import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
-import { useGetConversationsQuery } from "../../features/conversations/conversationsApi";
+import { conversationsApi, useGetConversationsQuery } from "../../features/conversations/conversationsApi";
 import getPartnerInfo from "../../utils/getPartnerInfo";
 import Error from "../ui/Error";
 import ChatItem from "./ChatItem";
 
 export default function ChatItems() {
+    const dispatch = useDispatch();
     const { user } = useSelector((state) => state.auth) || {};
     const { email } = user || {};
+    const [page, setPage] = useState(1)
+    const [hasMore, setHasMore] = useState(true)
     const {
-        data: conversations,
+        data,
         isLoading,
         isError,
         error,
     } = useGetConversationsQuery(email);
+    const {data: conversations, totalCount}= data || {}; 
 
+    const fetchMore =()=>{
+        setPage((prevPage)=>prevPage + 1)
+    }
+
+    useEffect(()=>{
+        if (page > 1) {
+            dispatch(conversationsApi.endpoints.getMoreConversations.initiate({email, page}))
+        }
+    },[page, email, dispatch])
+
+    useEffect(()=>{
+        if (totalCount > 0) {
+            const more = Math.ceil(totalCount / Number(process.env.REACT_APP_CONVERSATIONS_PER_PAGE)) > page
+            setHasMore(more)
+
+        }
+    },[totalCount, page])
+    
     // decide what to render
     let content = null;
 
@@ -31,7 +55,13 @@ export default function ChatItems() {
     } else if (!isLoading && !isError && conversations?.length === 0) {
         content = <li className="m-2 text-center">No conversations found!</li>;
     } else if (!isLoading && !isError && conversations?.length > 0) {
-        content = conversations.map((conversation) => {
+        content =<InfiniteScroll
+        dataLength={conversations.length} //This is important field to render the next data
+        next={fetchMore}
+        hasMore={hasMore}
+        loader={<h4>Loading...</h4>}
+        height={window.innerHeight -129}
+        > {conversations.map((conversation) => {
             const { id, message, timestamp } = conversation;
             const { email } = user || {};
             const { name, email: partnerEmail } = getPartnerInfo(
@@ -53,7 +83,7 @@ export default function ChatItems() {
                     </Link>
                 </li>
             );
-        });
+        })}</InfiniteScroll>;
     }
 
     return <ul>{content}</ul>;
